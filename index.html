@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Photo Booth</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="window">
+
+  <!-- TITLEBAR -->
+  <div class="titlebar">
+    <div class="traffic">
+      <div class="dot dot-r"></div>
+      <div class="dot dot-y"></div>
+      <div class="dot dot-g"></div>
+    </div>
+    <div class="win-title">Photo Booth</div>
+    <div class="titlebar-right">
+      <button class="tb-btn" id="btn-share" title="Share">⬆</button>
+    </div>
+  </div>
+
+  <!-- TOOLBAR -->
+  <div class="toolbar">
+    <div class="tb-group">
+      <div class="tb-seg active">Camera</div>
+      <div class="tb-seg tb-disabled">Gallery</div>
+    </div>
+    <div class="tb-sep"></div>
+    <div class="tb-group">
+      <div class="tb-seg active" data-ratio="4/3" onclick="setRatio(this)">4:3</div>
+      <div class="tb-seg" data-ratio="1/1" onclick="setRatio(this)">1:1</div>
+      <div class="tb-seg" data-ratio="16/9" onclick="setRatio(this)">16:9</div>
+    </div>
+    <button class="tb-action" id="tb-capture-btn" onclick="doCapture()">
+      ⏺ Capture
+    </button>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main">
+
+    <!-- SIDEBAR: filters -->
+    <div class="sidebar">
+      <div class="sb-label">Filters</div>
+      <div class="sb-row active" onclick="setFilter(this, 'none')">
+        <span class="sb-icon">○</span>
+        <span class="sb-name">Normal</span>
+      </div>
+      <div class="sb-row" onclick="setFilter(this, 'grayscale(1)')">
+        <span class="sb-icon">◑</span>
+        <span class="sb-name">Black & White</span>
+      </div>
+      <div class="sb-row" onclick="setFilter(this, 'sepia(.6) saturate(1.4) brightness(1.05)')">
+        <span class="sb-icon">☀</span>
+        <span class="sb-name">Warm</span>
+      </div>
+      <div class="sb-row" onclick="setFilter(this, 'saturate(.5) brightness(1.1)')">
+        <span class="sb-icon">◌</span>
+        <span class="sb-name">Fade</span>
+      </div>
+      <div class="sb-row" onclick="setFilter(this, 'saturate(1.9) contrast(1.1)')">
+        <span class="sb-icon">◉</span>
+        <span class="sb-name">Vivid</span>
+      </div>
+      <div class="sb-row" onclick="setFilter(this, 'hue-rotate(180deg) saturate(.8)')">
+        <span class="sb-icon">❄</span>
+        <span class="sb-name">Cool</span>
+      </div>
+      <div class="sb-row" onclick="setFilter(this, 'sepia(.85) contrast(.85) brightness(.9)')">
+        <span class="sb-icon">⬡</span>
+        <span class="sb-name">Vintage</span>
+      </div>
+    </div>
+
+    <!-- VIEWPORT -->
+    <div class="vp-panel">
+
+      <!-- status bar -->
+      <div class="vp-statusbar">
+        <span class="vp-filter-label" id="filter-label">Normal</span>
+        <div class="vp-status">
+          <div class="vp-dot" id="status-dot"></div>
+          <span id="status-text">Klik "Izinkan Kamera"</span>
+        </div>
+      </div>
+
+      <!-- video area -->
+      <div class="vp-main">
+        <video id="video" autoplay playsinline muted></video>
+        <canvas id="canvas-preview" style="display:none"></canvas>
+
+        <!-- countdown overlay -->
+        <div class="vp-countdown" id="countdown"></div>
+
+        <!-- flash overlay -->
+        <div class="vp-flash" id="flash"></div>
+
+        <!-- error overlay -->
+        <div class="vp-error" id="error-overlay" style="display:none">
+          <div class="error-icon">⚠</div>
+          <div class="error-text" id="error-text"></div>
+          <button class="error-retry" onclick="startCamera()">Coba lagi</button>
+        </div>
+
+        <!-- start overlay -->
+        <div class="vp-start" id="start-overlay">
+          <div class="start-ring"></div>
+          <div class="start-text">Klik untuk aktifkan kamera</div>
+          <button class="start-btn" onclick="startCamera()">Izinkan Kamera</button>
+        </div>
+      </div>
+
+      <!-- bottom controls -->
+      <div class="vp-bar">
+        <button class="vp-ctrl-btn" id="btn-mirror" onclick="toggleMirror()" title="Mirror">
+          ⇄ Mirror
+        </button>
+
+        <div class="timer-seg">
+          <div class="t-opt active" onclick="setTimer(this, 0)">Off</div>
+          <div class="t-opt" onclick="setTimer(this, 3)">3s</div>
+          <div class="t-opt" onclick="setTimer(this, 5)">5s</div>
+          <div class="t-opt" onclick="setTimer(this, 10)">10s</div>
+        </div>
+
+        <button class="btn-cap" id="btn-cap" onclick="doCapture()">
+          ⏺ <span id="cap-lbl">Capture</span>
+        </button>
+
+        <button class="vp-ctrl-btn" onclick="retake()">↺ Retake</button>
+      </div>
+
+    </div>
+
+    <!-- INSPECTOR -->
+    <div class="inspector">
+
+      <!-- template picker -->
+      <div class="ins-section">
+        <div class="ins-title">Template</div>
+
+        <div class="ins-tpl-row active" onclick="setTemplate(this, 1)">
+          <div class="ins-tpl-thumb">
+            <div class="tpl-slots">
+              <div class="s-rect" style="width:22px;height:16px"></div>
+            </div>
+          </div>
+          <div class="ins-tpl-info">
+            <div class="ins-tpl-name">Single</div>
+            <div class="ins-tpl-sub">1 photo</div>
+          </div>
+          <span class="ins-check">✓</span>
+        </div>
+
+        <div class="ins-tpl-row" onclick="setTemplate(this, 2)">
+          <div class="ins-tpl-thumb">
+            <div class="tpl-slots">
+              <div class="s-rect" style="width:22px;height:7px"></div>
+              <div class="s-rect" style="width:22px;height:7px"></div>
+            </div>
+          </div>
+          <div class="ins-tpl-info">
+            <div class="ins-tpl-name">Strip ×2</div>
+            <div class="ins-tpl-sub">2 photos · vertical</div>
+          </div>
+          <span class="ins-check">✓</span>
+        </div>
+
+        <div class="ins-tpl-row" onclick="setTemplate(this, 4)">
+          <div class="ins-tpl-thumb">
+            <div class="tpl-slots">
+              <div class="s-rect" style="width:22px;height:4px"></div>
+              <div class="s-rect" style="width:22px;height:4px"></div>
+              <div class="s-rect" style="width:22px;height:4px"></div>
+              <div class="s-rect" style="width:22px;height:4px"></div>
+            </div>
+          </div>
+          <div class="ins-tpl-info">
+            <div class="ins-tpl-name">Strip ×4</div>
+            <div class="ins-tpl-sub">4 photos · classic</div>
+          </div>
+          <span class="ins-check">✓</span>
+        </div>
+
+        <!-- cari baris ini dan ganti onclick-nya -->
+        <div class="ins-tpl-row" onclick="setTemplate(this, 4, 'grid')">
+          <div class="ins-tpl-thumb">
+            <div class="tpl-slots grid2x2">
+              <div class="s-rect" style="width:9px;height:7px"></div>
+              <div class="s-rect" style="width:9px;height:7px"></div>
+              <div class="s-rect" style="width:9px;height:7px"></div>
+              <div class="s-rect" style="width:9px;height:7px"></div>
+            </div>
+          </div>
+          <div class="ins-tpl-info">
+            <div class="ins-tpl-name">Grid 2×2</div>
+            <div class="ins-tpl-sub">4 photos · square</div>
+          </div>
+          <span class="ins-check">✓</span>
+        </div>
+
+      </div>
+
+      <!-- shots taken -->
+      <div class="ins-section shots-section">
+        <div class="ins-title">Shots Taken</div>
+
+        <div class="progress-wrap">
+          <div class="progress-track">
+            <div class="progress-fill" id="progress-fill" style="width:0%"></div>
+          </div>
+          <div class="progress-label" id="progress-label">0 of 1</div>
+        </div>
+
+        <div id="shot-list"></div>
+      </div>
+
+      <!-- download -->
+      <div class="ins-dl">
+        <button class="btn-dl" id="btn-download" onclick="downloadResult()">
+          ↓ Download Result
+        </button>
+        <button class="btn-dl-ghost" id="btn-share-result" onclick="shareResult()">
+          ⬆ Share...
+        </button>
+      </div>
+
+    </div>
+
+  </div><!-- end .main -->
+
+</div><!-- end .window -->
+
+<script src="script.js"></script>
+</body>
+</html>
