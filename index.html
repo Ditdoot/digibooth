@@ -27,8 +27,8 @@
   <!-- TOOLBAR -->
   <div class="toolbar">
     <div class="tb-group">
-      <div class="tb-seg active">Camera</div>
-      <div class="tb-seg tb-disabled">Gallery</div>
+      <div class="tb-seg active" id="tab-camera" onclick="switchTab('camera')">Camera</div>
+      <div class="tb-seg" id="tab-gallery" onclick="switchTab('gallery')">Gallery</div>
     </div>
     <div class="tb-sep"></div>
     <div class="tb-group">
@@ -232,10 +232,45 @@
 
     </div>
 
+    <!-- GALLERY PANEL -->
+    <div class="gallery-panel" id="gallery-panel" style="display:none">
+
+      <div class="gallery-topbar">
+        <span class="gallery-count" id="gallery-count">0 photos this session</span>
+        <button class="gallery-dl-all" id="btn-dl-all" onclick="downloadResult()">
+          ↓ Download All
+        </button>
+      </div>
+
+      <div class="gallery-grid" id="gallery-grid">
+        <!-- diisi oleh JavaScript -->
+      </div>
+
+      <div class="gallery-empty" id="gallery-empty">
+        <div class="gallery-empty-icon">📷</div>
+        <div class="gallery-empty-title">Belum ada foto</div>
+        <div class="gallery-empty-sub">Kembali ke Camera dan ambil beberapa foto dulu</div>
+        <button class="gallery-empty-btn" onclick="switchTab('camera')">
+          Buka Camera
+        </button>
+      </div>
+
+    </div>
+
   </div><!-- end .main -->
 
 </div><!-- end .window -->
 
 <script src="script.js"></script>
+
+<!-- LIGHTBOX -->
+<div class="gallery-lightbox" id="gallery-lightbox" onclick="closeLightbox()">
+  <button class="lightbox-close" onclick="closeLightbox()">✕</button>
+  <button class="lightbox-nav lightbox-prev" onclick="event.stopPropagation(); lightboxPrev()">‹</button>
+  <img class="lightbox-img" id="lightbox-img" src="" alt="preview" onclick="event.stopPropagation()">
+  <button class="lightbox-nav lightbox-next" onclick="event.stopPropagation(); lightboxNext()">›</button>
+  <div class="lightbox-counter" id="lightbox-counter"></div>
+</div>
+
 </body>
 </html>

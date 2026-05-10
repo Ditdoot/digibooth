@@ -1,13 +1,16 @@
 // ── STATE ────────────────────────────────
 const state = {
-  stream:    null,
-  shots:     [],      // array dataURL foto yang sudah diambil
-  shotCount: 1,       // target jumlah foto
-  timerVal:  0,
-  mirrored:  false,
-  filter:    'none',  // CSS filter string aktif
-  counting:  false,
-  layout:    'strip', // 'strip' atau 'grid'
+  stream:       null,
+  shots:        [],        // foto sementara selama capture berlangsung
+  sessions:     [],        // array semua sesi yang sudah selesai
+  shotCount:    1,
+  timerVal:     0,
+  mirrored:     false,
+  filter:       'none',
+  filterName:   'Normal',
+  counting:     false,
+  layout:       'strip',
+  templateName: 'Single',
 }
 
 // ── ELEMEN ───────────────────────────────
@@ -71,59 +74,28 @@ function showError(err) {
 function setFilter(el, f) {
   document.querySelectorAll('.sb-row').forEach(r => r.classList.remove('active'))
   el.classList.add('active')
-  state.filter = f
-  // live preview di video pakai CSS filter
+  state.filter     = f
+  state.filterName = el.querySelector('.sb-name').textContent
   video.style.filter = f === 'none' ? '' : f
-  filterLabel.textContent = el.querySelector('.sb-name').textContent
+  filterLabel.textContent = state.filterName
 }
 
-// FIX FILTER: ctx.filter tidak reliable di Safari.
-// Solusi: render video ke offscreen canvas dulu,
-// lalu pakai CSS filter via drawImage dari canvas yang sudah di-filter.
-// Cara paling kompatibel: buat <canvas> sementara, set style.filter,
-// lalu getContext dari img yang di-render lewat CSS.
-//
-// Cara paling simpel yang work di semua browser:
-// set ctx.filter SEBELUM drawImage, ini support Chrome + Firefox + Safari 15.4+
-// Ganti fungsi drawWithFilter yang lama dengan ini
 function drawWithFilter(ctx, videoEl, filterStr, w, h) {
   if (!filterStr || filterStr === 'none') {
     ctx.drawImage(videoEl, 0, 0, w, h)
     return
   }
-
-  // Cara yang work di SEMUA browser termasuk Safari:
-  // 1. render video ke canvas sementara tanpa filter
-  // 2. convert canvas ke blob URL
-  // 3. buat Image element, set CSS filter lewat inline style
-  // 4. draw Image itu ke canvas utama
-
-  // Tapi cara di atas async dan complex.
-  // Cara paling simpel yang cross-browser:
-  // Gunakan globalCompositeOperation + filter via SVG feColorMatrix
-
-  // Untuk sekarang, pakai ctx.filter dulu
-  // (Chrome + Firefox + Safari 15.4+)
-  // dan tambahkan fallback manual untuk B&W
-  
   if (filterStr === 'grayscale(1)') {
-    // fallback manual untuk B&W — work di semua browser
     ctx.drawImage(videoEl, 0, 0, w, h)
     const imageData = ctx.getImageData(0, 0, w, h)
     const data = imageData.data
     for (let i = 0; i < data.length; i += 4) {
-      // rumus luminance — lebih akurat dari rata-rata biasa
       const gray = data[i] * 0.299 + data[i+1] * 0.587 + data[i+2] * 0.114
-      data[i]   = gray  // R
-      data[i+1] = gray  // G
-      data[i+2] = gray  // B
-      // data[i+3] = alpha, tidak diubah
+      data[i] = data[i+1] = data[i+2] = gray
     }
     ctx.putImageData(imageData, 0, 0)
     return
   }
-
-  // untuk filter lain — pakai ctx.filter
   ctx.save()
   ctx.filter = filterStr
   ctx.drawImage(videoEl, 0, 0, w, h)
@@ -134,9 +106,10 @@ function drawWithFilter(ctx, videoEl, filterStr, w, h) {
 function setTemplate(el, count, layout) {
   document.querySelectorAll('.ins-tpl-row').forEach(r => r.classList.remove('active'))
   el.classList.add('active')
-  state.shotCount = count
-  state.layout    = layout || 'strip'
-  state.shots     = []
+  state.shotCount    = count
+  state.layout       = layout || 'strip'
+  state.templateName = el.querySelector('.ins-tpl-name').textContent
+  state.shots        = []
   resetCaptureBtn()
   buildShotList()
 }
@@ -159,8 +132,12 @@ function toggleMirror() {
 function doCapture() {
   if (state.counting || !state.stream) return
 
-  // sudah penuh → retake all
+  // sudah penuh → reset untuk set baru
+  // sudah penuh → hapus sesi terakhir dari gallery lalu reset untuk set baru
   if (state.shots.length >= state.shotCount) {
+    // kalau mau retake, hapus sesi terakhir yang sudah tersimpan
+    // supaya tidak duplikat di gallery
+    state.sessions.pop()
     state.shots = []
     buildShotList()
     resetCaptureBtn()
@@ -209,15 +186,12 @@ function takePhoto() {
   final.height   = H
   const finalCtx = final.getContext('2d')
 
-  // handle mirror
   if (state.mirrored) {
     finalCtx.translate(W, 0)
     finalCtx.scale(-1, 1)
-    // kalau mirror, draw dulu lalu apply filter di atas
     finalCtx.drawImage(video, 0, 0, W, H)
-    finalCtx.setTransform(1, 0, 0, 1, 0, 0) // reset transform
+    finalCtx.setTransform(1, 0, 0, 1, 0, 0)
 
-    // apply filter manual ke hasil draw
     if (state.filter === 'grayscale(1)') {
       const imageData = finalCtx.getImageData(0, 0, W, H)
       const data = imageData.data
@@ -227,7 +201,6 @@ function takePhoto() {
       }
       finalCtx.putImageData(imageData, 0, 0)
     } else if (state.filter !== 'none') {
-      // untuk filter lain saat mirror — perlu redraw dengan filter
       const tmp    = document.createElement('canvas')
       tmp.width    = W
       tmp.height   = H
@@ -241,7 +214,6 @@ function takePhoto() {
       finalCtx.restore()
     }
   } else {
-    // tidak mirror — langsung draw dengan filter
     drawWithFilter(finalCtx, video, state.filter, W, H)
   }
 
@@ -249,13 +221,32 @@ function takePhoto() {
   state.shots.push(dataURL)
   buildShotList()
 
+  // semua slot terisi → simpan sebagai sesi baru
+  // semua slot terisi → simpan sebagai sesi baru, langsung reset
+  // semua slot terisi → simpan sebagai sesi baru
   if (state.shots.length >= state.shotCount) {
-    capLbl.textContent = 'Retake all'
-    tbCaptureBtn.textContent = '↺ Retake'
+    saveSession()
+    capLbl.textContent = 'New set'
+    tbCaptureBtn.textContent = '+ New set'
   }
 }
 
-// ── 7. RESET CAPTURE BTN ─────────────────
+// ── 7. SESSION ───────────────────────────
+function saveSession() {
+  const now  = new Date()
+  const time = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+
+  state.sessions.push({
+    id:           state.sessions.length + 1,
+    templateName: state.templateName,
+    layout:       state.layout,
+    shotCount:    state.shotCount,
+    time:         time,
+    shots:        [...state.shots],  // copy array
+  })
+}
+
+// ── 8. RESET BTN ─────────────────────────
 function resetCaptureBtn() {
   state.counting = false
   btnCap.classList.remove('capturing')
@@ -264,8 +255,7 @@ function resetCaptureBtn() {
   capLbl.textContent = 'Capture'
 }
 
-// ── 8. RETAKE ────────────────────────────
-// Retake hanya hapus foto TERAKHIR
+// ── 9. RETAKE ────────────────────────────
 function retake() {
   if (state.shots.length === 0) return
   state.shots.pop()
@@ -275,7 +265,7 @@ function retake() {
   }
 }
 
-// ── 9. SHOT LIST ─────────────────────────
+// ── 10. SHOT LIST (inspector) ────────────
 function buildShotList() {
   const list = document.getElementById('shot-list')
   list.innerHTML = ''
@@ -283,7 +273,7 @@ function buildShotList() {
   for (let i = 0; i < state.shotCount; i++) {
     const taken = i < state.shots.length
 
-    const row   = document.createElement('div')
+    const row = document.createElement('div')
     row.className = 'ins-shot-row'
 
     const thumb = document.createElement('div')
@@ -302,11 +292,11 @@ function buildShotList() {
     info.className = 'ins-shot-info'
 
     const nm = document.createElement('div')
-    nm.className = 'ins-shot-name'
+    nm.className   = 'ins-shot-name'
     nm.textContent = taken ? 'Shot ' + (i + 1) : 'Waiting...'
 
     const sb = document.createElement('div')
-    sb.className = 'ins-shot-sub'
+    sb.className   = 'ins-shot-sub'
     sb.textContent = taken
       ? 'Tap to preview'
       : 'Slot ' + (i + 1) + ' of ' + state.shotCount
@@ -331,115 +321,104 @@ function buildShotList() {
   progressLabel.textContent = state.shots.length + ' of ' + state.shotCount
 }
 
-// ── 10. DOWNLOAD ─────────────────────────
+// ── 11. DOWNLOAD ─────────────────────────
 function downloadResult() {
-  if (state.shots.length === 0) return
+  if (state.sessions.length === 0 && state.shots.length === 0) return
+  const shots = state.shots.length > 0
+    ? state.shots
+    : state.sessions[state.sessions.length - 1]?.shots
+  if (!shots || shots.length === 0) return
 
-  if (state.shots.length === 1) {
-    downloadDataURL(state.shots[0], 'booth-photo.png')
+  if (shots.length === 1) {
+    downloadDataURL(shots[0], 'booth-photo.png')
     return
   }
-
-  state.layout === 'grid' ? buildGridCanvas() : buildStripCanvas()
+  state.layout === 'grid' ? buildGridCanvas(shots) : buildStripCanvas(shots)
 }
 
-// Strip: foto disusun vertikal
-function buildStripCanvas() {
-  const PAD    = 20
-  const W      = 800
-  const slotH  = Math.round(W * (9 / 16))
+function downloadSession(session) {
+  if (session.shots.length === 1) {
+    downloadDataURL(session.shots[0], `booth-session${session.id}.png`)
+    return
+  }
+  const name = `booth-session${session.id}`
+  session.layout === 'grid' ? buildGridCanvas(session.shots, name) : buildStripCanvas(session.shots, name)
+}
+
+function downloadAllSessions() {
+  if (state.sessions.length === 0) return
+  state.sessions.forEach((session, i) => {
+    setTimeout(() => downloadSession(session), i * 600)
+  })
+}
+
+function buildStripCanvas(shots, filename) {
+  const PAD   = 20
+  const W     = 800
+  const slotH = Math.round(W * (9 / 16))
 
   const canvas  = document.createElement('canvas')
   canvas.width  = W
-  canvas.height = PAD + state.shots.length * (slotH + PAD)
+  canvas.height = PAD + shots.length * (slotH + PAD)
 
   const ctx = canvas.getContext('2d')
   ctx.fillStyle = '#FFFFFF'
   ctx.fillRect(0, 0, canvas.width, canvas.height)
 
-  loadAllImages(state.shots, (imgs) => {
+  loadAllImages(shots, (imgs) => {
     imgs.forEach((img, i) => {
-      const y = PAD + i * (slotH + PAD)
-      drawCover(ctx, img, PAD, y, W - PAD * 2, slotH)
+      drawCover(ctx, img, PAD, PAD + i * (slotH + PAD), W - PAD * 2, slotH)
     })
-    const ts = new Date().toISOString().slice(0, 10)
-    downloadCanvas(canvas, `booth-strip-${ts}`)
+    downloadCanvas(canvas, filename || `booth-strip-${new Date().toISOString().slice(0, 10)}`)
   })
 }
 
-// FIX GRID: posisi [x, y] dihitung dengan benar per kolom dan baris
-function buildGridCanvas() {
-  const PAD    = 20
-  const W      = 800
-  // lebar tiap cell = separuh lebar canvas dikurangi 3x padding (kiri, tengah, kanan)
-  const cellW  = Math.floor((W - PAD * 3) / 2)
-  const cellH  = Math.round(cellW * (3 / 4))   // rasio 4:3
+function buildGridCanvas(shots, filename) {
+  const PAD   = 20
+  const W     = 800
+  const cellW = Math.floor((W - PAD * 3) / 2)
+  const cellH = Math.round(cellW * (3 / 4))
 
   const canvas  = document.createElement('canvas')
   canvas.width  = W
-  // tinggi total = 2 baris cell + 3 padding (atas, tengah, bawah)
   canvas.height = PAD * 3 + cellH * 2
 
   const ctx = canvas.getContext('2d')
   ctx.fillStyle = '#FFFFFF'
   ctx.fillRect(0, 0, canvas.width, canvas.height)
 
-  loadAllImages(state.shots, (imgs) => {
+  loadAllImages(shots, (imgs) => {
     imgs.forEach((img, i) => {
       if (i >= 4) return
-
-      // FIX: hitung col dan row dengan benar
-      const col = i % 2          // 0 atau 1  (kiri / kanan)
-      const row = Math.floor(i / 2)  // 0 atau 1  (atas / bawah)
-
-      const x = PAD + col * (cellW + PAD)
-      const y = PAD + row * (cellH + PAD)
-
-      drawCover(ctx, img, x, y, cellW, cellH)
+      const col = i % 2
+      const row = Math.floor(i / 2)
+      drawCover(ctx, img, PAD + col * (cellW + PAD), PAD + row * (cellH + PAD), cellW, cellH)
     })
-    const ts = new Date().toISOString().slice(0, 10)
-    downloadCanvas(canvas, `booth-grid-${ts}`)
+    downloadCanvas(canvas, filename || `booth-grid-${new Date().toISOString().slice(0, 10)}`)
   })
 }
 
-// drawCover: gambar img ke area (x,y,w,h) dengan object-fit:cover
-// supaya foto tidak squeeze meski rasio berbeda
 function drawCover(ctx, img, x, y, w, h) {
-  const imgRatio  = img.width / img.height
-  const boxRatio  = w / h
-
+  const imgRatio = img.width / img.height
+  const boxRatio = w / h
   let sx, sy, sw, sh
-
   if (imgRatio > boxRatio) {
-    // gambar lebih lebar dari box → crop kiri-kanan
-    sh = img.height
-    sw = img.height * boxRatio
-    sx = (img.width - sw) / 2
-    sy = 0
+    sh = img.height; sw = img.height * boxRatio
+    sx = (img.width - sw) / 2; sy = 0
   } else {
-    // gambar lebih tinggi dari box → crop atas-bawah
-    sw = img.width
-    sh = img.width / boxRatio
-    sx = 0
-    sy = (img.height - sh) / 2
+    sw = img.width; sh = img.width / boxRatio
+    sx = 0; sy = (img.height - sh) / 2
   }
-
   ctx.drawImage(img, sx, sy, sw, sh, x, y, w, h)
 }
 
-// helper: load semua dataURL → array Image objects → callback
 function loadAllImages(dataURLs, callback) {
-  const imgs  = new Array(dataURLs.length)
-  let loaded  = 0
-
+  const imgs = new Array(dataURLs.length)
+  let loaded = 0
   dataURLs.forEach((src, i) => {
     const img  = new Image()
-    img.onload = () => {
-      imgs[i] = img
-      loaded++
-      if (loaded === dataURLs.length) callback(imgs)
-    }
-    img.src = src
+    img.onload = () => { imgs[i] = img; loaded++; if (loaded === dataURLs.length) callback(imgs) }
+    img.src    = src
   })
 }
 
@@ -447,25 +426,20 @@ function downloadCanvas(canvas, filename) {
   canvas.toBlob(blob => {
     const url  = URL.createObjectURL(blob)
     const link = document.createElement('a')
-    link.href     = url
-    link.download = filename + '.png'
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
+    link.href = url; link.download = filename + '.png'
+    document.body.appendChild(link); link.click()
+    document.body.removeChild(link); URL.revokeObjectURL(url)
   }, 'image/png')
 }
 
 function downloadDataURL(dataURL, filename) {
   const link = document.createElement('a')
-  link.href     = dataURL
-  link.download = filename
-  document.body.appendChild(link)
-  link.click()
+  link.href = dataURL; link.download = filename
+  document.body.appendChild(link); link.click()
   document.body.removeChild(link)
 }
 
-// ── 11. SHARE ────────────────────────────
+// ── 12. SHARE ────────────────────────────
 async function shareResult() {
   if (state.shots.length === 0 || !navigator.share) return
   try {
@@ -478,11 +452,220 @@ async function shareResult() {
   }
 }
 
-// ── 12. RATIO ────────────────────────────
+// ── 13. RATIO ────────────────────────────
 function setRatio(el) {
   document.querySelectorAll('.tb-group:last-of-type .tb-seg')
     .forEach(s => s.classList.remove('active'))
   el.classList.add('active')
+}
+
+// ── 14. TAB SWITCH ───────────────────────
+function switchTab(tab) {
+  const sidebar    = document.querySelector('.sidebar')
+  const vpPanel    = document.querySelector('.vp-panel')
+  const inspector  = document.querySelector('.inspector')
+  const galleryPanel = document.getElementById('gallery-panel')
+  const tabCamera  = document.getElementById('tab-camera')
+  const tabGallery = document.getElementById('tab-gallery')
+  const tbCapBtn   = document.getElementById('tb-capture-btn')
+
+  if (tab === 'gallery') {
+    if (sidebar)   sidebar.style.display   = 'none'
+    if (vpPanel)   vpPanel.style.display   = 'none'
+    if (inspector) inspector.style.display = 'none'
+    galleryPanel.style.display = 'flex'
+    tabCamera.classList.remove('active')
+    tabGallery.classList.add('active')
+    tbCapBtn.style.display = 'none'
+    buildGallery()
+  } else {
+    if (sidebar)   sidebar.style.display   = ''
+    if (vpPanel)   vpPanel.style.display   = ''
+    if (inspector) inspector.style.display = ''
+    galleryPanel.style.display = 'none'
+    tabCamera.classList.add('active')
+    tabGallery.classList.remove('active')
+    tbCapBtn.style.display = ''
+  }
+}
+
+// ── 15. GALLERY ──────────────────────────
+function buildGallery() {
+  const container = document.getElementById('gallery-grid')
+  const empty     = document.getElementById('gallery-empty')
+  const countEl   = document.getElementById('gallery-count')
+  const btnDlAll  = document.getElementById('btn-dl-all')
+
+  container.innerHTML = ''
+
+  // gabungkan sesi selesai + sesi yang sedang berjalan
+  const allSessions = [...state.sessions]
+
+  if (allSessions.length === 0) {
+    container.style.display = 'none'
+    empty.classList.add('show')
+    countEl.textContent = '0 sessions'
+    btnDlAll.disabled   = true
+    return
+  }
+
+  container.style.display = 'block'
+  empty.classList.remove('show')
+  btnDlAll.disabled = false
+
+  const totalPhotos = allSessions.reduce((sum, s) => sum + s.shots.length, 0)
+  countEl.textContent =
+    allSessions.length + ' session' + (allSessions.length > 1 ? 's' : '') +
+    ' · ' + totalPhotos + ' photo' + (totalPhotos > 1 ? 's' : '')
+
+  allSessions.forEach((session) => {
+    // wrapper grup
+    const group = document.createElement('div')
+    group.className = 'gallery-group'
+
+    // header
+    const header = document.createElement('div')
+    header.className = 'gallery-group-header'
+
+    const left = document.createElement('div')
+    left.className = 'gallery-group-left'
+
+    const title = document.createElement('span')
+    title.className   = 'gallery-group-title'
+    title.textContent = 'Session ' + session.id +
+      (session.inProgress ? '  🔴 In progress' : '')
+
+    const meta = document.createElement('span')
+    meta.className   = 'gallery-group-meta'
+    meta.textContent = session.templateName + ' · ' + session.time
+
+    left.appendChild(title)
+    left.appendChild(meta)
+
+    const right = document.createElement('div')
+    right.className = 'gallery-group-actions'
+
+    if (!session.inProgress) {
+      const btnDl = document.createElement('button')
+      btnDl.className   = 'gallery-group-btn'
+      btnDl.textContent = '↓ Download set'
+      btnDl.onclick     = () => downloadSession(session)
+      right.appendChild(btnDl)
+    }
+
+    header.appendChild(left)
+    header.appendChild(right)
+
+    // foto grid
+    const grid = document.createElement('div')
+    grid.className = 'gallery-session-grid'
+
+    session.shots.forEach((dataURL, i) => {
+      const card = document.createElement('div')
+      card.className = 'gallery-card'
+
+      const img = document.createElement('img')
+      img.className = 'gallery-card-img'
+      img.src       = dataURL
+      img.alt       = 'Shot ' + (i + 1)
+      img.onclick   = () => openLightbox(allSessions.indexOf(session), i, allSessions)
+
+      const footer = document.createElement('div')
+      footer.className = 'gallery-card-footer'
+
+      const label = document.createElement('span')
+      label.className   = 'gallery-card-label'
+      label.textContent = 'Shot ' + (i + 1)
+
+      const actions = document.createElement('div')
+      actions.className = 'gallery-card-actions'
+
+      const btnDl = document.createElement('button')
+      btnDl.className   = 'gallery-card-btn'
+      btnDl.title       = 'Download'
+      btnDl.textContent = '↓'
+      btnDl.onclick     = () => downloadDataURL(dataURL, `booth-s${session.id}-shot${i + 1}.png`)
+
+      const btnDel = document.createElement('button')
+      btnDel.className   = 'gallery-card-btn delete'
+      btnDel.title       = 'Hapus'
+      btnDel.textContent = '✕'
+      btnDel.onclick     = () => deletePhoto(session, i)
+
+      actions.appendChild(btnDl)
+      actions.appendChild(btnDel)
+      footer.appendChild(label)
+      footer.appendChild(actions)
+      card.appendChild(img)
+      card.appendChild(footer)
+      grid.appendChild(card)
+    })
+
+    group.appendChild(header)
+    group.appendChild(grid)
+    container.appendChild(group)
+  })
+}
+
+function deletePhoto(session, photoIndex) {
+  if (session.inProgress) {
+    state.shots.splice(photoIndex, 1)
+    buildShotList()
+    if (state.shots.length < state.shotCount) resetCaptureBtn()
+  } else {
+    const si = state.sessions.findIndex(s => s.id === session.id)
+    if (si !== -1) {
+      state.sessions[si].shots.splice(photoIndex, 1)
+      if (state.sessions[si].shots.length === 0) state.sessions.splice(si, 1)
+    }
+  }
+  buildGallery()
+}
+
+// ── 16. LIGHTBOX ─────────────────────────
+let lbSessionIdx = 0
+let lbPhotoIdx   = 0
+let lbSessions   = []
+
+function openLightbox(sIdx, pIdx, sessions) {
+  lbSessions   = sessions
+  lbSessionIdx = sIdx
+  lbPhotoIdx   = pIdx
+  updateLightbox()
+  document.getElementById('gallery-lightbox').classList.add('open')
+}
+
+function closeLightbox() {
+  document.getElementById('gallery-lightbox').classList.remove('open')
+}
+
+function lightboxPrev() {
+  lbPhotoIdx--
+  if (lbPhotoIdx < 0) {
+    lbSessionIdx = (lbSessionIdx - 1 + lbSessions.length) % lbSessions.length
+    lbPhotoIdx   = lbSessions[lbSessionIdx].shots.length - 1
+  }
+  updateLightbox()
+}
+
+function lightboxNext() {
+  lbPhotoIdx++
+  if (lbPhotoIdx >= lbSessions[lbSessionIdx].shots.length) {
+    lbSessionIdx = (lbSessionIdx + 1) % lbSessions.length
+    lbPhotoIdx   = 0
+  }
+  updateLightbox()
+}
+
+function updateLightbox() {
+  const session   = lbSessions[lbSessionIdx]
+  const flatIndex = lbSessions.slice(0, lbSessionIdx).reduce((s, x) => s + x.shots.length, 0) + lbPhotoIdx + 1
+  const total     = lbSessions.reduce((s, x) => s + x.shots.length, 0)
+
+  document.getElementById('lightbox-img').src = session.shots[lbPhotoIdx]
+  document.getElementById('lightbox-counter').textContent =
+    'Session ' + session.id + ' · Shot ' + (lbPhotoIdx + 1) + ' / ' + session.shots.length +
+    '  (' + flatIndex + ' of ' + total + ')'
 }
 
 // ── INIT ─────────────────────────────────
