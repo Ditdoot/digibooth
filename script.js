@@ -1,8 +1,8 @@
 // ── STATE ────────────────────────────────
 const state = {
   stream:       null,
-  shots:        [],        // foto sementara selama capture berlangsung
-  sessions:     [],        // array semua sesi yang sudah selesai
+  shots:        [],
+  sessions:     [],
   shotCount:    1,
   timerVal:     0,
   mirrored:     false,
@@ -11,6 +11,7 @@ const state = {
   counting:     false,
   layout:       'strip',
   templateName: 'Single',
+  ratio:        '4/3',    // ← tambahkan ini
 }
 
 // ── ELEMEN ───────────────────────────────
@@ -102,6 +103,64 @@ function drawWithFilter(ctx, videoEl, filterStr, w, h) {
   ctx.restore()
 }
 
+// hitung area crop berdasarkan rasio yang dipilih
+function getCropArea(vW, vH, ratio) {
+  let targetRatio
+
+  if (ratio === '1/1') {
+    targetRatio = 1
+  } else if (ratio === '16/9') {
+    targetRatio = 16 / 9
+  } else {
+    targetRatio = 4 / 3  // default 4:3
+  }
+
+  const videoRatio = vW / vH
+
+  let sw, sh, sx, sy
+
+  if (videoRatio > targetRatio) {
+    // video lebih lebar dari target → crop kiri kanan
+    sh = vH
+    sw = Math.round(vH * targetRatio)
+    sx = Math.round((vW - sw) / 2)
+    sy = 0
+  } else {
+    // video lebih tinggi dari target → crop atas bawah
+    sw = vW
+    sh = Math.round(vW / targetRatio)
+    sx = 0
+    sy = Math.round((vH - sh) / 2)
+  }
+
+  return { sx, sy, sw, sh, cW: sw, cH: sh }
+}
+
+// draw video dengan crop dan filter sekaligus
+function drawWithFilterCrop(ctx, videoEl, filterStr, sx, sy, sw, sh, cW, cH) {
+  if (!filterStr || filterStr === 'none') {
+    ctx.drawImage(videoEl, sx, sy, sw, sh, 0, 0, cW, cH)
+    return
+  }
+
+  if (filterStr === 'grayscale(1)') {
+    ctx.drawImage(videoEl, sx, sy, sw, sh, 0, 0, cW, cH)
+    const imageData = ctx.getImageData(0, 0, cW, cH)
+    const data = imageData.data
+    for (let i = 0; i < data.length; i += 4) {
+      const gray = data[i] * 0.299 + data[i+1] * 0.587 + data[i+2] * 0.114
+      data[i] = data[i+1] = data[i+2] = gray
+    }
+    ctx.putImageData(imageData, 0, 0)
+    return
+  }
+
+  ctx.save()
+  ctx.filter = filterStr
+  ctx.drawImage(videoEl, sx, sy, sw, sh, 0, 0, cW, cH)
+  ctx.restore()
+}
+
 // ── 3. TEMPLATE ──────────────────────────
 function setTemplate(el, count, layout) {
   document.querySelectorAll('.ins-tpl-row').forEach(r => r.classList.remove('active'))
@@ -178,18 +237,21 @@ function takePhoto() {
   flash.classList.add('flash')
   setTimeout(() => flash.classList.remove('flash'), 120)
 
-  const W = video.videoWidth
-  const H = video.videoHeight
+  const vW = video.videoWidth
+  const vH = video.videoHeight
+
+  // hitung crop area sesuai rasio yang dipilih
+  const { sx, sy, sw, sh, cW, cH } = getCropArea(vW, vH, state.ratio)
 
   const final    = document.createElement('canvas')
-  final.width    = W
-  final.height   = H
+  final.width    = cW
+  final.height   = cH
   const finalCtx = final.getContext('2d')
 
-  if (state.mirrored) {
-    finalCtx.translate(W, 0)
+    if (state.mirrored) {
+    finalCtx.translate(cW, 0)
     finalCtx.scale(-1, 1)
-    finalCtx.drawImage(video, 0, 0, W, H)
+    finalCtx.drawImage(video, sx, sy, sw, sh, 0, 0, cW, cH)
     finalCtx.setTransform(1, 0, 0, 1, 0, 0)
 
     if (state.filter === 'grayscale(1)') {
@@ -202,19 +264,19 @@ function takePhoto() {
       finalCtx.putImageData(imageData, 0, 0)
     } else if (state.filter !== 'none') {
       const tmp    = document.createElement('canvas')
-      tmp.width    = W
-      tmp.height   = H
+      tmp.width    = cW
+      tmp.height   = cH
       const tmpCtx = tmp.getContext('2d')
-      tmpCtx.translate(W, 0)
+      tmpCtx.translate(cW, 0)
       tmpCtx.scale(-1, 1)
-      tmpCtx.drawImage(video, 0, 0, W, H)
+      tmpCtx.drawImage(video, sx, sy, sw, sh, 0, 0, cW, cH)
       finalCtx.save()
       finalCtx.filter = state.filter
       finalCtx.drawImage(tmp, 0, 0)
       finalCtx.restore()
     }
   } else {
-    drawWithFilter(finalCtx, video, state.filter, W, H)
+  drawWithFilterCrop(finalCtx, video, state.filter, sx, sy, sw, sh, cW, cH)
   }
 
   const dataURL = final.toDataURL('image/png')
@@ -457,6 +519,7 @@ function setRatio(el) {
   document.querySelectorAll('.tb-group:last-of-type .tb-seg')
     .forEach(s => s.classList.remove('active'))
   el.classList.add('active')
+  state.ratio = el.dataset.ratio   // ambil nilai dari data-ratio di HTML
 }
 
 // ── 14. TAB SWITCH ───────────────────────
