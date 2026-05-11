@@ -731,6 +731,88 @@ function updateLightbox() {
     '  (' + flatIndex + ' of ' + total + ')'
 }
 
+// ── MOBILE ───────────────────────────────
+
+function setTemplateMob(el, count, layout, name) {
+  document.querySelectorAll('.mob-tpl-card').forEach(c => c.classList.remove('active'))
+  el.classList.add('active')
+  // sync dengan desktop state
+  state.shotCount    = count
+  state.layout       = layout
+  state.templateName = name
+  state.shots        = []
+  resetCaptureBtn()
+  buildShotList()
+  buildMobShotList()
+}
+
+function switchMobTab(n) {
+  document.querySelectorAll('.mob-tab').forEach((t,i) => t.classList.toggle('active', i===n))
+  document.querySelectorAll('.mob-panel').forEach((p,i) => p.classList.toggle('active', i===n))
+}
+
+function buildMobShotList() {
+  const list = document.getElementById('mob-shot-list')
+  if (!list) return
+  list.innerHTML = ''
+
+  for (let i = 0; i < state.shotCount; i++) {
+    const taken = i < state.shots.length
+
+    const row = document.createElement('div')
+    row.className = 'mob-shot-row'
+
+    const thumb = document.createElement('div')
+    thumb.className = 'mob-shot-thumb' + (taken ? ' done' : '')
+
+    if (taken) {
+      const img = new Image()
+      img.src = state.shots[i]
+      thumb.appendChild(img)
+    } else {
+      thumb.textContent = i + 1
+    }
+
+    const info = document.createElement('div')
+    info.className = 'mob-shot-info'
+
+    const nm = document.createElement('div')
+    nm.className   = 'mob-shot-name'
+    nm.textContent = taken ? 'Shot ' + (i + 1) : 'Waiting...'
+
+    const sb = document.createElement('div')
+    sb.className   = 'mob-shot-sub'
+    sb.textContent = taken ? 'Tap to preview' : 'Slot ' + (i + 1) + ' of ' + state.shotCount
+
+    info.appendChild(nm)
+    info.appendChild(sb)
+    row.appendChild(thumb)
+    row.appendChild(info)
+    list.appendChild(row)
+  }
+
+  const pct = Math.round(state.shots.length / state.shotCount * 100)
+  const fill = document.getElementById('mob-progress-fill')
+  if (fill) fill.style.width = pct + '%'
+}
+
+function openSheet()  { document.getElementById('mobile-sheet').classList.add('open') }
+function closeSheet() { document.getElementById('mobile-sheet').classList.remove('open') }
+
+function setSheetFilter(el, f, name) {
+  document.querySelectorAll('.sheet-filter-row').forEach(r => r.classList.remove('active'))
+  el.classList.add('active')
+  state.filter     = f
+  state.filterName = name
+  video.style.filter = f === 'none' ? '' : f
+  filterLabel.textContent = name
+  const mobLabel = document.getElementById('mob-filter-label')
+  if (mobLabel) mobLabel.textContent = name
+  setTimeout(closeSheet, 200)
+}
+
 // ── INIT ─────────────────────────────────
 buildShotList()
 btnCap.disabled = true
+// di paling bawah buildShotList(), setelah baris progressLabel
+buildMobShotList()  // ← tambahkan ini

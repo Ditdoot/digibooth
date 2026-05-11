@@ -259,6 +259,80 @@
 
   </div><!-- end .main -->
 
+  <!-- MOBILE HEADER (tampil hanya di HP) -->
+  <div class="mobile-header" id="mobile-header">
+    <div class="mobile-title">Photo Booth</div>
+    <button class="mobile-filter-btn" onclick="openSheet()">
+      ⚙ <span id="mob-filter-label">Normal</span>
+    </button>
+  </div>
+
+  <!-- MOBILE BOTTOM PANEL -->
+  <div class="mobile-bottom">
+    <div class="mob-tabs">
+      <div class="mob-tab active" onclick="switchMobTab(0)">Template</div>
+      <div class="mob-tab" onclick="switchMobTab(1)">Shots</div>
+    </div>
+
+    <div class="mob-panel active" id="mob-p0">
+      <div class="mob-tpl-scroll">
+        <div class="mob-tpl-card active" onclick="setTemplateMob(this,1,'strip','Single')">
+          <div class="mob-tpl-thumb">
+            <div class="mob-tpl-slots">
+              <div class="m-rect" style="width:28px;height:20px"></div>
+            </div>
+          </div>
+          <span class="mob-tpl-name">Single</span>
+        </div>
+        <div class="mob-tpl-card" onclick="setTemplateMob(this,2,'strip','Strip ×2')">
+          <div class="mob-tpl-thumb">
+            <div class="mob-tpl-slots">
+              <div class="m-rect" style="width:28px;height:9px"></div>
+              <div class="m-rect" style="width:28px;height:9px"></div>
+            </div>
+          </div>
+          <span class="mob-tpl-name">Strip ×2</span>
+        </div>
+        <div class="mob-tpl-card" onclick="setTemplateMob(this,4,'strip','Strip ×4')">
+          <div class="mob-tpl-thumb">
+            <div class="mob-tpl-slots">
+              <div class="m-rect" style="width:28px;height:5px"></div>
+              <div class="m-rect" style="width:28px;height:5px"></div>
+              <div class="m-rect" style="width:28px;height:5px"></div>
+              <div class="m-rect" style="width:28px;height:5px"></div>
+            </div>
+          </div>
+          <span class="mob-tpl-name">Strip ×4</span>
+        </div>
+        <div class="mob-tpl-card" onclick="setTemplateMob(this,4,'grid','Grid 2×2')">
+          <div class="mob-tpl-thumb">
+            <div class="mob-tpl-slots g">
+              <div class="m-rect" style="width:12px;height:9px"></div>
+              <div class="m-rect" style="width:12px;height:9px"></div>
+              <div class="m-rect" style="width:12px;height:9px"></div>
+              <div class="m-rect" style="width:12px;height:9px"></div>
+            </div>
+          </div>
+          <span class="mob-tpl-name">Grid 2×2</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="mob-panel" id="mob-p1">
+      <div class="mob-shots">
+        <div class="mob-progress-track">
+          <div class="mob-progress-fill" id="mob-progress-fill" style="width:0%"></div>
+        </div>
+        <div id="mob-shot-list"></div>
+      </div>
+    </div>
+
+    <div class="mob-dl">
+      <button class="mob-btn-dl" onclick="downloadResult()">↓ Download</button>
+      <button class="mob-btn-share" onclick="shareResult()">⬆</button>
+    </div>
+  </div>
+
 </div><!-- end .window -->
 
 <script src="script.js"></script>
@@ -270,6 +344,50 @@
   <img class="lightbox-img" id="lightbox-img" src="" alt="preview" onclick="event.stopPropagation()">
   <button class="lightbox-nav lightbox-next" onclick="event.stopPropagation(); lightboxNext()">›</button>
   <div class="lightbox-counter" id="lightbox-counter"></div>
+</div>
+
+<!-- MOBILE FILTER SHEET -->
+<div class="mobile-sheet" id="mobile-sheet">
+  <div class="sheet-backdrop" onclick="closeSheet()"></div>
+  <div class="sheet-panel">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">Filter</div>
+    <div class="sheet-filter-row active" onclick="setSheetFilter(this,'none','Normal')">
+      <div class="sheet-thumb"><div class="sheet-thumb-inner" style="filter:none"></div></div>
+      <span class="sheet-filter-name">Normal</span>
+      <span class="sheet-check">✓</span>
+    </div>
+    <div class="sheet-filter-row" onclick="setSheetFilter(this,'grayscale(1)','Black & White')">
+      <div class="sheet-thumb"><div class="sheet-thumb-inner" style="filter:grayscale(1)"></div></div>
+      <span class="sheet-filter-name">Black & White</span>
+      <span class="sheet-check">✓</span>
+    </div>
+    <div class="sheet-filter-row" onclick="setSheetFilter(this,'sepia(.6) saturate(1.4) brightness(1.05)','Warm')">
+      <div class="sheet-thumb"><div class="sheet-thumb-inner" style="filter:sepia(.6) saturate(1.4) brightness(1.05)"></div></div>
+      <span class="sheet-filter-name">Warm</span>
+      <span class="sheet-check">✓</span>
+    </div>
+    <div class="sheet-filter-row" onclick="setSheetFilter(this,'saturate(.5) brightness(1.1)','Fade')">
+      <div class="sheet-thumb"><div class="sheet-thumb-inner" style="filter:saturate(.5) brightness(1.1)"></div></div>
+      <span class="sheet-filter-name">Fade</span>
+      <span class="sheet-check">✓</span>
+    </div>
+    <div class="sheet-filter-row" onclick="setSheetFilter(this,'saturate(1.9) contrast(1.1)','Vivid')">
+      <div class="sheet-thumb"><div class="sheet-thumb-inner" style="filter:saturate(1.9) contrast(1.1)"></div></div>
+      <span class="sheet-filter-name">Vivid</span>
+      <span class="sheet-check">✓</span>
+    </div>
+    <div class="sheet-filter-row" onclick="setSheetFilter(this,'hue-rotate(180deg) saturate(.8)','Cool')">
+      <div class="sheet-thumb"><div class="sheet-thumb-inner" style="filter:hue-rotate(180deg) saturate(.8)"></div></div>
+      <span class="sheet-filter-name">Cool</span>
+      <span class="sheet-check">✓</span>
+    </div>
+    <div class="sheet-filter-row" onclick="setSheetFilter(this,'sepia(.85) contrast(.85) brightness(.9)','Vintage')">
+      <div class="sheet-thumb"><div class="sheet-thumb-inner" style="filter:sepia(.85) contrast(.85) brightness(.9)"></div></div>
+      <span class="sheet-filter-name">Vintage</span>
+      <span class="sheet-check">✓</span>
+    </div>
+  </div>
 </div>
 
 </body>
